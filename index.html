@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>창신중학교 로봇팔 학습시키기</title>
+<style>
+  :root{
+    --bg:#f3f5fa; --card:#fff; --ink:#1d2433; --sub:#6b7488; --line:#dfe3ec;
+    --main:#1c5a96; --main2:#e6eef8; --accent:#f0a81e; --ok:#1fa463; --warn:#e5484d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--main);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:5px solid var(--accent)}
+  header h1{font-size:21px;margin:0;flex:1}
+  .status{display:flex;align-items:center;gap:8px;font-size:14px}
+  .dot{width:12px;height:12px;border-radius:50%;background:#9fb3c8}
+  .dot.on{background:#3ee08a;box-shadow:0 0 0 4px #3ee08a33}
+  .mode{padding:5px 12px;border-radius:99px;font-size:13px;background:#ffffff22}
+  .mode.play{background:var(--accent);color:#1d2433;font-weight:700}
+  main{max-width:1200px;margin:0 auto;padding:18px;display:grid;grid-template-columns:1.25fr 1fr;gap:18px}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .col{display:grid;gap:18px;align-content:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .card h2{font-size:16px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .step{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--main);color:#fff;font-size:13px}
+  button{font:inherit;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;background:var(--main2);color:var(--main);font-weight:600}
+  button.primary{background:var(--main);color:#fff}
+  button.accent{background:var(--accent);color:#1d2433}
+  button.danger{background:#fdecec;color:var(--warn)}
+  button.light{background:#fff;color:var(--main)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  canvas{display:block;max-width:100%}
+  #armCanvas{width:100%;background:#fafbfe;border:1px solid var(--line);border-radius:10px}
+  .servos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+  @media(max-width:560px){.servos{grid-template-columns:repeat(2,1fr)}}
+  .servo{background:var(--bg);border-radius:10px;padding:10px}
+  .servo .name{font-size:12px;color:var(--sub)}
+  .servo b{font-size:24px}
+  .servo input{width:100%}
+  .servo .range{font-size:11px;color:var(--sub)}
+  .joys{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .joy{text-align:center;font-size:13px;color:var(--sub)}
+  .joy canvas{width:140px;height:140px;margin:0 auto 6px}
+  .joy b{color:var(--ink)}
+  ol#points{list-style:none;padding:0;margin:10px 0;max-height:300px;overflow:auto}
+  ol#points li{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px}
+  ol#points li.now{border-color:var(--accent);background:#fff7e6}
+  .num{width:26px;height:26px;border-radius:50%;background:var(--main);color:#fff;display:grid;place-items:center;font-size:13px;flex:none}
+  ol#points .v{flex:1;font-size:13px;line-height:1.5}
+  ol#points li button{padding:6px 9px;font-size:12px}
+  .empty{color:var(--sub);font-size:14px;padding:18px;text-align:center;border:1px dashed var(--line);border-radius:10px;line-height:1.6}
+  .slider-row{display:flex;align-items:center;gap:10px;font-size:14px;margin:8px 0}
+  .slider-row input{flex:1}
+  .slider-row span{min-width:62px;text-align:right}
+  .help{font-size:13px;color:var(--sub);line-height:1.7;margin:10px 0 0}
+  .tip{background:#fff7e6;border-left:4px solid var(--accent);padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.6;margin-top:10px}
+  #log{font-family:Consolas,monospace;font-size:12px;color:var(--sub);height:80px;overflow:auto;background:var(--bg);border-radius:8px;padding:8px;margin-top:10px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 창신중학교 로봇팔 학습시키기</h1>
+  <span class="mode" id="modeTag">🕹️ 조이스틱 조종 중</span>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">연결 안 됨</span></div>
+  <button class="light" id="btnConnect">🔌 아두이노 연결</button>
+</header>
+
+<main>
+  <section class="col">
+    <div class="card">
+      <h2><span class="step">1</span> 조이스틱으로 조종하기</h2>
+      <canvas id="armCanvas" width="640" height="320"></canvas>
+      <div class="servos" id="servoBoxes"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="btnHome">🏠 처음 자세로</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🕹️ 조이스틱 상태</h2>
+      <div class="joys">
+        <div class="joy">
+          <canvas id="joyL" width="280" height="280"></canvas>
+          <b>왼쪽 조이스틱</b><br>좌우 → 1번 팔 · 위아래 → 아래판<br>
+          <span id="joyLText">-</span>
+        </div>
+        <div class="joy">
+          <canvas id="joyR" width="280" height="280"></canvas>
+          <b>오른쪽 조이스틱</b><br>좌우 → 2번 팔 · 위아래 → 집게<br>
+          <span id="joyRText">-</span>
+        </div>
+      </div>
+      <div class="tip">💡 <b>왼쪽 조이스틱을 꾹 누르면</b> 지금 자세가 저장되고, <b>오른쪽 조이스틱을 꾹 누르면</b> 재생/멈춤이 돼요.</div>
+      <div id="log"></div>
+    </div>
+  </section>
+
+  <section class="col">
+    <div class="card">
+      <h2><span class="step">2</span> 동작 가르치기 (저장)</h2>
+      <div class="row">
+        <button class="primary" id="btnSave" style="flex:1">💾 지금 자세 저장</button>
+        <button class="danger" id="btnClear">전체 삭제</button>
+      </div>
+      <ol id="points"></ol>
+      <div class="row">
+        <button id="btnExport">📤 파일로 내보내기</button>
+        <button id="btnImport">📥 파일 불러오기</button>
+        <input type="file" id="fileInput" accept=".json" hidden>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">3</span> 배운 대로 따라 하기 (재생)</h2>
+      <div class="slider-row">이동 속도 <input type="range" id="playSpeed" min="10" max="120" value="40"><span><b id="playSpeedText">40</b>°/초</span></div>
+      <div class="slider-row">자세마다 멈춤 <input type="range" id="holdTime" min="0" max="3000" step="100" value="500"><span><b id="holdText">0.5</b>초</span></div>
+      <label style="font-size:14px"><input type="checkbox" id="loopPlay"> 🔁 계속 반복하기</label>
+      <div class="row" style="margin-top:12px">
+        <button class="accent" id="btnPlay" style="flex:1">▶ 재생</button>
+        <button class="danger" id="btnStop" disabled>■ 멈춤</button>
+      </div>
+      <p class="help">
+        ① 아두이노에 <b>robot_arm_learning.ino</b>를 업로드하세요. (시리얼 모니터는 닫기)<br>
+        ② 크롬/엣지에서 <b>아두이노 연결</b>을 누르고 포트를 고르세요.<br>
+        ③ 조이스틱으로 자세를 만들고 저장 → 여러 개 저장 → <b>재생</b>!<br>
+        재생 중에는 조이스틱이 잠시 멈추고, 멈춤을 누르면 다시 조종할 수 있어요.
+      </p>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ===================== 설정 (교재 코드와 동일) ===================== */
+const SERVOS = [
+  { key:'bottom', name:'아래판 (bottom)', min:60, max:120, home:90 },
+  { key:'arm1',   name:'1번 팔 (arm1)',   min:60, max:120, home:90 },
+  { key:'arm2',   name:'2번 팔 (arm2)',   min:60, max:120, home:90 },
+  { key:'grip',   name:'집게 (grip)',     min:5,  max:50,  home:5  },
+];
+const HOME = SERVOS.map(s => s.home);
+const STORE_KEY = 'changsin_robot_learning_v2';
+
+/* ===================== 상태 ===================== */
+const S = {
+  port:null, reader:null, writer:null, readClosed:null, writeClosed:null,
+  ready:false, connected:false,
+  ang:[...HOME],          // 현재 각도
+  joy:[512,512,512,512],  // A0~A3 원래 값
+  hasJoy:false,
+  playing:false, playIndex:-1,
+  points:[]
+};
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clampI = (i, v) => Math.max(SERVOS[i].min, Math.min(SERVOS[i].max, v));
+
+function log(msg){
+  const el = $('log');
+  el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ===================== 보내기 (줄 서기) ===================== */
+const outQ = [];
+let flushing = false;
+function send(line){
+  // 각도 명령이 연달아 쌓이면 마지막 것만 남김
+  if(line.startsWith('S,') && outQ.length && outQ[outQ.length-1].startsWith('S,')) outQ[outQ.length-1] = line;
+  else outQ.push(line);
+  flush();
+}
+async function flush(){
+  if(flushing || !S.writer || !S.ready) return;
+  flushing = true;
+  try{ while(outQ.length) await S.writer.write(outQ.shift() + '\n'); }
+  catch(e){ log('보내기 실패'); }
+  flushing = false;
+}
+function sendAngles(){ send('S,' + S.ang.map(Math.round).join(',')); }
+
+/* ===================== 웹 시리얼 ===================== */
+async function connect(){
+  if(!('serial' in navigator)){
+    alert('이 브라우저는 웹 시리얼을 지원하지 않아요.\n컴퓨터에서 크롬 또는 엣지로 열어 주세요.');
+    return;
+  }
+  try{
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate:115200 });
+    S.port = port;
+    const enc = new TextEncoderStream();
+    S.writeClosed = enc.readable.pipeTo(port.writable).catch(()=>{});
+    S.writer = enc.writable.getWriter();
+    S.ready = false; outQ.length = 0;
+    setStatus(true);
+    log('연결됨. 아두이노 준비 중...');
+    readLoop();
+    setTimeout(() => { if(S.port && !S.ready){ S.ready = true; flush(); } }, 2500);
+  }catch(e){
+    if(e.name !== 'NotFoundError') log('연결 실패: ' + e.message);
+  }
+}
+
+async function readLoop(){
+  const dec = new TextDecoderStream();
+  S.readClosed = S.port.readable.pipeTo(dec.writable).catch(()=>{});
+  S.reader = dec.readable.getReader();
+  let buf = '';
+  try{
+    while(true){
+      const { value, done } = await S.reader.read();
+      if(done) break;
+      buf += value;
+      let i;
+      while((i = buf.indexOf('\n')) >= 0){
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if(line) parseLine(line);
+      }
+    }
+  }catch(e){ log('읽기 중단: ' + e.message); }
+  finally{ S.reader.releaseLock(); }
+}
+
+function parseLine(line){
+  if(line === 'READY'){
+    S.ready = true; log('아두이노 준비 완료!');
+    send('M,0'); flush();
+    return;
+  }
+  if(line.startsWith('D,')){
+    const p = line.split(',').slice(1).map(Number);
+    if(p.length < 8 || p.some(isNaN)) return;
+    if(!S.ready){ S.ready = true; flush(); }
+    S.joy = p.slice(4, 8); S.hasJoy = true;
+    // 조종 모드에서는 아두이노의 각도가 진짜 각도
+    if(!S.playing && !dragging) S.ang = p.slice(0, 4);
+    return;
+  }
+  if(line === 'K,L'){ if(!S.playing) savePoint('왼쪽 버튼'); return; }
+  if(line === 'K,R'){ S.playing ? stopPlay() : play(); return; }
+}
+
+async function disconnect(){
+  stopPlay();
+  try{
+    if(S.reader){ await S.reader.cancel(); await S.readClosed; }
+    if(S.writer){ await S.writer.close(); await S.writeClosed; }
+    if(S.port) await S.port.close();
+  }catch(e){}
+  S.port = S.reader = S.writer = null;
+  S.ready = false; S.hasJoy = false;
+  setStatus(false);
+  log('연결 끊김');
+}
+
+function setStatus(on){
+  S.connected = on;
+  $('dot').classList.toggle('on', on);
+  $('statusText').textContent = on ? '연결됨' : '연결 안 됨';
+  $('btnConnect').textContent = on ? '연결 끊기' : '🔌 아두이노 연결';
+}
+navigator.serial?.addEventListener('disconnect', e => {
+  if(S.port && e.target === S.port){ log('USB가 빠졌어요'); disconnect(); }
+});
+
+/* ===================== 서보 상자(슬라이더) ===================== */
+let dragging = false;
+function buildServoBoxes(){
+  const wrap = $('servoBoxes');
+  SERVOS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'servo';
+    d.innerHTML = `<div class="name">${s.name}</div>
+      <b id="aText${i}">${s.home}</b>°
+      <input type="range" id="aRange${i}" min="${s.min}" max="${s.max}" value="${s.home}">
+      <div class="range">${s.min}° ~ ${s.max}°</div>`;
+    wrap.appendChild(d);
+    const r = d.querySelector('input');
+    r.addEventListener('input', e => {
+      if(S.playing) return;
+      dragging = true;
+      S.ang[i] = +e.target.value;
+      sendAngles();
+    });
+    r.addEventListener('change', () => setTimeout(() => dragging = false, 200));
+  });
+}
+
+/* ===================== 화면 그리기 ===================== */
+function updateUI(){
+  S.ang.forEach((a, i) => {
+    $('aText' + i).textContent = Math.round(a);
+    const r = $('aRange' + i);
+    if(document.activeElement !== r) r.value = Math.round(a);
+    r.disabled = S.playing;
+  });
+  const j = S.joy;
+  $('joyLText').textContent = S.hasJoy ? `A1(좌우) ${j[1]} · A0(위아래) ${j[0]}` : '연결 대기';
+  $('joyRText').textContent = S.hasJoy ? `A2(좌우) ${j[2]} · A3(위아래) ${j[3]}` : '연결 대기';
+  drawArm(); drawJoy('joyL', j[1], j[0]); drawJoy('joyR', j[2], j[3]);
+}
+
+function armGeom(a, cv){
+  const bx = cv.width * 0.42, by = cv.height - 60;
+  const L1 = 115, L2 = 120;
+  const t1 = (90 + (a[1] - 90) * 1.3) * Math.PI / 180;   // 1번 팔: 90° = 똑바로 위
+  const t2 = (0 - (a[2] - 90) * 1.3) * Math.PI / 180;    // 2번 팔: 90° = 수평
+  const ex = bx + L1 * Math.cos(t1), ey = by - L1 * Math.sin(t1);
+  const hx = ex + L2 * Math.cos(t2), hy = ey - L2 * Math.sin(t2);
+  return { bx, by, ex, ey, hx, hy, t2 };
+}
+
+function drawArm(){
+  const cv = $('armCanvas'), c = cv.getContext('2d');
+  const a = S.ang;
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#e6eaf2'; c.fillRect(0, cv.height - 40, cv.width, 40);
+
+  // 저장한 위치 (집게 끝)
+  S.points.forEach((p, i) => {
+    const q = armGeom(p, cv);
+    c.fillStyle = i === S.playIndex ? '#f0a81e' : '#9db8da';
+    c.beginPath(); c.arc(q.hx, q.hy, 10, 0, 7); c.fill();
+    c.fillStyle = '#fff'; c.font = 'bold 11px sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(i + 1, q.hx, q.hy);
+  });
+
+  const g = armGeom(a, cv);
+  // 받침
+  c.fillStyle = '#c9a77c';
+  c.fillRect(g.bx - 70, g.by + 8, 140, 14);
+  c.fillRect(g.bx - 50, g.by - 6, 100, 16);
+  // 팔
+  c.lineCap = 'round';
+  c.strokeStyle = '#b8895a'; c.lineWidth = 22;
+  c.beginPath(); c.moveTo(g.bx, g.by); c.lineTo(g.ex, g.ey); c.stroke();
+  c.strokeStyle = '#d0a273'; c.lineWidth = 16;
+  c.beginPath(); c.moveTo(g.ex, g.ey); c.lineTo(g.hx, g.hy); c.stroke();
+  // 관절
+  [[g.bx, g.by, '1번 팔'], [g.ex, g.ey, '2번 팔']].forEach(([x, y, t]) => {
+    c.fillStyle = '#1c5a96'; c.beginPath(); c.arc(x, y, 12, 0, 7); c.fill();
+    c.fillStyle = '#6b7488'; c.font = '12px sans-serif'; c.textAlign = 'right'; c.textBaseline = 'middle';
+    c.fillText(t, x - 18, y);
+  });
+  // 집게 (벌어짐 = 집게 각도)
+  const open = (a[3] - 5) / 45 * 0.6 + 0.08;
+  c.strokeStyle = '#f0a81e'; c.lineWidth = 6;
+  [1, -1].forEach(s => {
+    const ang = g.t2 + s * open;
+    c.beginPath(); c.moveTo(g.hx, g.hy);
+    c.lineTo(g.hx + 34 * Math.cos(ang), g.hy - 34 * Math.sin(ang)); c.stroke();
+  });
+
+  // 오른쪽 위: 아래판 회전 (위에서 본 모습)
+  const cx = cv.width - 75, cy = 75, r = 50;
+  c.fillStyle = '#eef2f8'; c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill();
+  c.strokeStyle = '#cfd6e6'; c.lineWidth = 2;
+  c.beginPath(); c.arc(cx, cy, r, Math.PI + Math.PI/6, -Math.PI/6); c.stroke();
+  const tb = (180 - a[0]) * Math.PI / 180;  // 90° = 앞
+  c.strokeStyle = '#1c5a96'; c.lineWidth = 6;
+  c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + (r-6) * Math.cos(tb), cy - (r-6) * Math.sin(tb)); c.stroke();
+  c.fillStyle = '#1c5a96'; c.beginPath(); c.arc(cx, cy, 7, 0, 7); c.fill();
+  c.fillStyle = '#6b7488'; c.font = '12px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'top';
+  c.fillText('아래판 (위에서 본 모습)', cx, cy + r + 8);
+}
+
+function drawJoy(id, x, y){
+  const cv = $(id), c = cv.getContext('2d'), w = cv.width, r = w/2 - 14;
+  c.clearRect(0, 0, w, w);
+  c.fillStyle = '#eef2f8'; c.beginPath(); c.arc(w/2, w/2, r, 0, 7); c.fill();
+  c.strokeStyle = '#cfd6e6'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(w/2, 14); c.lineTo(w/2, w-14); c.moveTo(14, w/2); c.lineTo(w-14, w/2); c.stroke();
+  // 움직이는 구간 표시 (100 미만 / 1000 초과)
+  c.strokeStyle = '#f0a81e66'; c.setLineDash([6,6]);
+  c.beginPath(); c.arc(w/2, w/2, r * 412/512, 0, 7); c.stroke(); c.setLineDash([]);
+  if(!S.hasJoy) return;
+  const dx = (x - 512) / 512, dy = (y - 512) / 512;
+  c.fillStyle = '#1c5a96';
+  c.beginPath(); c.arc(w/2 + dx * r, w/2 - dy * r, 26, 0, 7); c.fill();
+}
+
+/* ===================== 저장 ===================== */
+function persist(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(S.points)); }catch(e){}
+  renderPoints();
+}
+function loadPoints(){
+  try{ S.points = sanitize(JSON.parse(localStorage.getItem(STORE_KEY) || '[]')); }catch(e){ S.points = []; }
+  renderPoints();
+}
+function sanitize(d){
+  if(!Array.isArray(d)) throw 0;
+  return d.filter(p => Array.isArray(p) && p.length === 4 && p.every(v => typeof v === 'number'))
+          .map(p => p.map((v, i) => clampI(i, Math.round(v))));
+}
+function savePoint(by){
+  S.points.push(S.ang.map(Math.round));
+  persist();
+  log(`${S.points.length}번 자세 저장${by ? ' (' + by + ')' : ''}`);
+}
+function renderPoints(){
+  const ol = $('points');
+  ol.innerHTML = '';
+  if(!S.points.length){
+    ol.innerHTML = '<div class="empty">아직 가르친 자세가 없어요.<br>조이스틱으로 움직이고 <b>지금 자세 저장</b>을 눌러 보세요.</div>';
+    return;
+  }
+  S.points.forEach((p, i) => {
+    const li = document.createElement('li');
+    if(i === S.playIndex) li.classList.add('now');
+    li.innerHTML = `<span class="num">${i+1}</span>
+      <span class="v">아래판 <b>${p[0]}°</b> · 1번 팔 <b>${p[1]}°</b><br>2번 팔 <b>${p[2]}°</b> · 집게 <b>${p[3]}°</b></span>
+      <button data-a="go" title="이 자세로 이동">이동</button>
+      <button data-a="up" title="순서 올리기">▲</button>
+      <button class="danger" data-a="del" title="삭제">✕</button>`;
+    li.querySelectorAll('button').forEach(b => b.onclick = () => {
+      if(S.playing) return;
+      const a = b.dataset.a;
+      if(a === 'go') runSingle(p);
+      if(a === 'up' && i > 0){ [S.points[i-1], S.points[i]] = [S.points[i], S.points[i-1]]; persist(); }
+      if(a === 'del'){ S.points.splice(i, 1); persist(); }
+    });
+    ol.appendChild(li);
+  });
+}
+
+$('btnSave').onclick = () => savePoint();
+$('btnClear').onclick = () => {
+  if(S.points.length && confirm('저장한 자세를 모두 지울까요?')){ S.points = []; persist(); }
+};
+$('btnExport').onclick = () => {
+  const data = S.points.map(p => ({ bottom:p[0], arm1:p[1], arm2:p[2], grip:p[3] }));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '로봇팔_학습동작.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+$('btnImport').onclick = () => $('fileInput').click();
+$('fileInput').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const raw = JSON.parse(await f.text());
+    const arr = raw.map(p => Array.isArray(p) ? p : [p.bottom, p.arm1, p.arm2, p.grip]);
+    S.points = sanitize(arr);
+    persist(); log(`파일에서 ${S.points.length}개 자세를 불러왔어요`);
+  }catch(err){ alert('올바른 동작 파일이 아니에요.'); }
+  e.target.value = '';
+};
+
+/* ===================== 재생 ===================== */
+async function moveTo(target){
+  const start = [...S.ang];
+  const dist = Math.max(...target.map((v, i) => Math.abs(v - start[i])));
+  const ms = Math.max(250, dist / +$('playSpeed').value * 1000);
+  const t0 = performance.now();
+  while(S.playing){
+    const t = Math.min(1, (performance.now() - t0) / ms);
+    const e = t < .5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2;   // 부드럽게 출발·정지
+    S.ang = start.map((s, i) => s + (target[i] - s) * e);
+    sendAngles();
+    if(t >= 1) break;
+    await sleep(30);
+  }
+}
+
+async function play(){
+  if(S.playing) return;
+  if(!S.points.length){ alert('먼저 자세를 저장(가르치기)해 주세요.'); return; }
+  setPlaying(true);
+  log('재생 시작');
+  do{
+    for(let i = 0; i < S.points.length && S.playing; i++){
+      S.playIndex = i; renderPoints();
+      await moveTo(S.points[i]);
+      if(S.playing) await sleep(+$('holdTime').value);
+    }
+  }while(S.playing && $('loopPlay').checked);
+  if(S.playing){ log('재생 끝'); stopPlay(); }
+}
+async function runSingle(p){
+  setPlaying(true);
+  await moveTo(p);
+  stopPlay();
+}
+function stopPlay(){
+  if(!S.playing && S.playIndex < 0) return;
+  setPlaying(false);
+  S.playIndex = -1;
+  renderPoints();
+}
+function setPlaying(on){
+  S.playing = on;
+  send(on ? 'M,1' : 'M,0');
+  $('btnPlay').disabled = on;
+  $('btnStop').disabled = !on;
+  $('btnSave').disabled = on;
+  $('btnHome').disabled = on;
+  $('modeTag').textContent = on ? '▶ 자동 재생 중' : '🕹️ 조이스틱 조종 중';
+  $('modeTag').classList.toggle('play', on);
+}
+
+/* ===================== 시작 ===================== */
+$('btnConnect').onclick = () => S.port ? disconnect() : connect();
+$('btnHome').onclick = () => { if(!S.playing) runSingle(HOME); };
+$('btnPlay').onclick = play;
+$('btnStop').onclick = () => { log('멈춤'); stopPlay(); };
+$('playSpeed').oninput = e => $('playSpeedText').textContent = e.target.value;
+$('holdTime').oninput = e => $('holdText').textContent = (e.target.value / 1000).toFixed(1);
+
+buildServoBoxes();
+loadPoints();
+setInterval(updateUI, 50);
+if(!('serial' in navigator)) log('⚠ 이 브라우저는 웹 시리얼을 지원하지 않아요. 크롬/엣지를 사용하세요.');
+</script>
+</body>
+</html>
